@@ -8,6 +8,16 @@
 
 > 这是一个学习项目，用来实践 Agent 编排。完整的实践笔记见 [`docs/agent-orchestration-notes.md`](docs/agent-orchestration-notes.md)。
 
+## 截图
+
+**Work 任务**：执行过程、自动识别并运行验收命令、产物卡片（双击打开、右键可选打开方式）
+
+![Work 任务页](docs/screenshots/work-task.png)
+
+**新对话**：在 Study 和 Work 之间切换，有三种执行模式，权限、项目文件夹和附件都在输入框里设置
+
+![新对话页](docs/screenshots/new-chat.png)
+
 ## 功能
 
 | 功能 | 说明 |
