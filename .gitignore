@@ -1,0 +1,6 @@
+.agent-workbench/
+.ui-preview-data/
+.test-data/
+__pycache__/
+*.pyc
+script-check.js
