@@ -139,6 +139,23 @@ pre.raw{font:12px/1.6 Consolas,"Microsoft YaHei",monospace;background:var(--code
 .interrupt:hover:not(:disabled){background:var(--err-l)}.bubble.guide{background:#fff6e9;border:1px solid #f3dfc2}.tag{font-size:11px;border-radius:4px;padding:0 6px;background:#eef1f2;color:var(--sub)}.tag.wait{background:var(--warn-l);color:var(--warn)}.tag.ok{background:var(--accent-l);color:var(--accent-d)}.chip.full{background:var(--warn-l);border-color:#f3d3ae;color:var(--warn)}.role.full{background:var(--warn-l);color:var(--warn)}
 .perm select{color:var(--sub)}.perm.full select{color:var(--warn);font-weight:600}
 .welcome .where{font-size:12px;color:var(--faint);margin-top:14px}
+.att-row{display:flex;flex-wrap:wrap;gap:6px;padding:9px 12px 0}.att-hint{flex-basis:100%;font-size:11.5px;color:var(--warn)}
+.att{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#f7f9f9;border-radius:9px;padding:4px 6px 4px 5px;max-width:260px;font-size:12.5px;cursor:default;user-select:none}
+.att img,.att .ic{width:30px;height:30px;border-radius:6px;object-fit:cover;flex:none;background:#e9eeef;display:inline-flex;align-items:center;justify-content:center;color:var(--sub)}
+.att .nm{display:flex;flex-direction:column;min-width:0;line-height:1.35}.att .nm b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.att .nm small{color:var(--faint);font-size:11px}
+.att .x{border:0;background:transparent;color:var(--faint);border-radius:5px;width:20px;height:20px;padding:0;flex:none}.att .x:hover{background:#e4e8e9;color:var(--err)}
+.bubble-atts{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin-top:6px;max-width:85%}.bubble-atts .att{background:var(--panel)}.bubble-atts .att.big img{width:180px;height:auto;max-height:180px;object-fit:contain}
+.fcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin-top:6px}
+.fcard{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:#f8fafa;cursor:default;user-select:none;min-width:0;outline:0}
+.fcard:hover,.fcard:focus-visible{border-color:#b9c9cc;background:var(--panel)}.fcard .ic{width:34px;height:34px;border-radius:8px;flex:none;display:inline-flex;align-items:center;justify-content:center;background:#e6eef7;color:#3a6ea5}
+.fcard .ic.img{padding:0;overflow:hidden;background:#eef1f1}.fcard .ic img{width:100%;height:100%;object-fit:cover}.fcard .ic.exe{background:var(--warn-l);color:var(--warn)}.fcard .ic.gone{background:#f0f0f0;color:var(--faint)}
+.fcard .nm{display:flex;flex-direction:column;min-width:0;line-height:1.4}.fcard .nm b{font-weight:500;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fcard .nm small{color:var(--faint);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fcard.gone{opacity:.6}.fhint{font-size:11.5px;color:var(--faint);margin-top:6px}.more-files{margin-top:6px}
+.shot{margin:.5em 0;max-width:100%}.shot img{max-width:100%;max-height:420px;border:1px solid var(--line);border-radius:10px;display:block;cursor:zoom-in}
+.ctx{position:fixed;z-index:60;min-width:190px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px #12303f2e;padding:5px}
+.ctx button{display:flex;width:100%;border:0;background:transparent;border-radius:7px;padding:6px 10px;text-align:left;font-size:13px;gap:8px}.ctx button:hover{background:#eef1f1}.ctx button.warn{color:var(--warn)}.ctx hr{border:0;border-top:1px solid var(--line2);margin:4px 0}
+.composer.drag{border-color:var(--accent);box-shadow:0 0 0 3px #2b9a7f22}
+.lightbox{position:fixed;inset:0;background:#0b1a22d9;z-index:70;display:flex;align-items:center;justify-content:center;cursor:zoom-out}.lightbox img{max-width:92vw;max-height:92vh;border-radius:8px;background:#fff}
 [hidden]{display:none!important}
 @media(max-width:900px){
  .app,.app.collapsed{grid-template-columns:minmax(0,1fr)}
@@ -161,6 +178,7 @@ pre.raw{font:12px/1.6 Consolas,"Microsoft YaHei",monospace;background:var(--code
   <button class="text-btn danger" id="shutdown" title="停止后台服务；正在执行的任务会停止，记录保留。只关页签不会停止后台。"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></svg>停止工作台</button></div>
 </aside>
 <div class="backdrop" id="backdrop"></div>
+<div class="ctx" id="ctx" role="menu" hidden></div>
 <main class="main">
  <div class="banner" id="offline" hidden>未连接到工作台后台服务。若已停止，请双击桌面的“dede工作台”重新启动；页面会自动重试。</div>
  <header class="top">
@@ -175,8 +193,10 @@ pre.raw{font:12px/1.6 Consolas,"Microsoft YaHei",monospace;background:var(--code
   <div class="toast" id="toast" role="alert" hidden></div>
   <form class="composer" id="composer">
    <div class="hint" id="hint" hidden><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16.5v.01"/></svg><span>Work 任务不能追加消息，发送会新建一个 Work 任务；想接着聊请用 Study。</span></div>
+   <div class="att-row" id="att-row" hidden></div>
    <textarea id="prompt" rows="1" placeholder="描述要完成的任务、范围和验收条件…" aria-label="任务描述"></textarea>
    <div class="crow">
+    <button type="button" class="icon-btn" id="attach" title="添加附件（也可以把文件或截图拖进来、直接粘贴）" aria-label="添加附件"><svg class="i" viewBox="0 0 24 24"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg></button>
     <span class="wgroup" id="work-ctrls"><span class="sel" title="运行方式"><select id="mode" aria-label="运行方式"><option value="combined">Codex 规划审核 · Harness 执行</option><option value="harness">仅 Harness</option><option value="codex">仅 Codex</option></select></span>
     <span class="sel perm" id="perm-wrap" title="一般：只能改项目文件夹；全部：不经过沙箱，可以访问整台电脑"><select id="perm" aria-label="权限"><option value="normal">一般权限</option><option value="full">全部权限</option></select></span>
     <div class="picker" id="picker"><button type="button" class="path" id="cwd-btn" aria-haspopup="menu" aria-expanded="false"><svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg><span id="cwd-label">选择项目文件夹</span><svg class="i caret" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
@@ -222,6 +242,10 @@ const ICON={copy:svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="
  hand:svg('<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>'),
  trash:svg('<path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/>'),
  shield:svg('<path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6Z"/>'),
+ file:svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/>'),
+ img:svg('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>'),
+ gear:svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="m10 12-2 2 2 2M14 12l2 2-2 2"/>'),
+ open:svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1"/><path d="M3 7v10a2 2 0 0 0 2 2h12l4-9H7l-4 9"/>'),
  retry:svg('<path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 4v4h4"/>')};
 
 let tasks=[],selected=(location.hash.match(/^#task=([0-9a-f]{1,32})$/)||[])[1]||null,detail=null,events=[],lastSeq=0,stopped=false,offline=false,health=null,polling=false,lastListSig=null,lastRenderSig='';
@@ -276,6 +300,8 @@ function md(src){
   const l=lines[i],fence=l.match(/^\s*(```+|~~~+)\s*([\w+#.-]*)/);
   if(fence){flush();const buf=[];i++;while(i<lines.length&&!lines[i].trim().startsWith(fence[1]))buf.push(lines[i++]);i++;out+=codeBox(buf.join('\n'),fence[2]);continue}
   if(!l.trim()){flush();i++;continue}
+  const pic=l.trim().match(/^!\[([^\]]*)\]\(<?([^)>]+)>?\)$/);
+  if(pic&&!/^[a-z]+:\/\//i.test(pic[2])){flush();out+='<div class="shot" data-file="'+esc(pic[2])+'" data-exec="0"><img alt="'+esc(pic[1])+'" data-preview="'+esc(pic[2])+'" title="点击放大 · 右键更多"></div>';i++;continue}
   const h=l.match(/^(#{1,6})\s+(.*)$/);if(h){flush();const n=Math.min(5,h[1].length+2);out+='<h'+n+'>'+inline(h[2])+'</h'+n+'>';i++;continue}
   if(/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)){flush();out+='<hr>';i++;continue}
   if(/^\s*\|.*\|\s*$/.test(l)&&/^\s*\|?\s*:?-{2,}/.test(lines[i+1]||'')){
@@ -316,7 +342,7 @@ $('search').addEventListener('input',renderList);
 function select(id){
  closeSideMobile();
  if(id===selected&&(detail||!id))return;
- selected=id;detail=null;events=[];lastSeq=0;lastRenderSig='';openKeys.clear();
+ selected=id;detail=null;events=[];lastSeq=0;lastRenderSig='';openKeys.clear();taskFiles=[];filesSig=null;
  history.replaceState(null,'',id?'#task='+id:location.pathname+location.search);
  renderList();renderMain(true);
  if(id)loadDetail(true);else $('prompt').focus();
@@ -328,6 +354,7 @@ async function loadDetail(scrollEnd){
  try{
   const t=await api('/api/tasks/'+encodeURIComponent(id));if(id!==selected)return;
   for(let n=0;n<20;n++){const page=await api('/api/tasks/'+encodeURIComponent(id)+'/events?after='+lastSeq);if(id!==selected)return;const fresh=page.filter(e=>e.seq>lastSeq);events.push(...fresh);if(fresh.length)lastSeq=fresh[fresh.length-1].seq;if(page.length<500)break}
+  const fsig=t.updated+'|'+t.state+'|'+JSON.stringify(t.artifacts||[])+'|'+(t.messages||[]).length;if(fsig!==filesSig){filesSig=fsig;try{taskFiles=await api('/api/tasks/'+encodeURIComponent(id)+'/files')}catch{taskFiles=[]}if(id!==selected)return}
   const first=!detail;detail=t;if(first&&kindOf(t)==='study'&&t.executor)$('chat-model').value=t.executor;renderMain(scrollEnd);
  }catch(e){if(id!==selected)return;if(!detail){renderTop();$('view').innerHTML='<div class="thread"><div class="note bad">'+esc(e.message)+'</div></div>'}else toast(e.message)}
 }
@@ -344,7 +371,7 @@ function renderTop(){
  if(kindOf(t)==='study'){
   $('chips').innerHTML='<span class="chip">Study</span><button class="chip" data-copytext="'+esc(t.cwd)+'" title="'+esc(t.cwd)+'\n产出文件在 output 子文件夹 · 点击复制路径">'+ICON.folder+esc(baseName(t.cwd))+'</button>'
    +(t.harness_model?'<span class="chip opt" title="这个对话里 Harness 使用的模型（首次使用时固定）">'+ICON.chip+esc(modelText(t.harness_model))+'</span>':'');
-  $('top-acts').innerHTML=(ACTIVE.includes(t.state)?'<button class="btn stop" data-act="cancel" title="停止这一轮回复">'+ICON.stop+'<span class="lbl">停止</span></button>':'')+del;
+  $('top-acts').innerHTML=(ACTIVE.includes(t.state)?'<button class="btn stop" data-act="cancel" title="停止这一轮回复">'+ICON.stop+'<span class="lbl">停止</span></button>':'')+'<button class="btn" data-openfolder title="在资源管理器中打开这个对话的文件夹">'+ICON.open+'<span class="lbl">打开文件夹</span></button>'+del;
   return;
  }
  let chips='<span class="chip opt" title="运行方式">'+esc(MODES[t.mode]||t.mode)+(t.takeover?' · 已由 Codex 接管':'')+'</span>';
@@ -354,7 +381,7 @@ function renderTop(){
  if(t.mode==='combined')chips+='<span class="chip opt" title="审核未通过后的质量修补次数，上限 3 次">修补 '+t.repair_count+'/3</span>';
  if(t.runtime_failures)chips+='<span class="chip opt" title="运行故障单独计数，不计入修补">故障 '+t.runtime_failures+'</span>';
  $('chips').innerHTML=chips;
- $('top-acts').innerHTML=(ACTIVE.includes(t.state)?'<button class="btn stop" data-act="cancel" title="只停止这个任务">'+ICON.stop+'<span class="lbl">停止任务</span></button>':'')+'<button class="btn" id="export" title="导出脱敏交接摘要（JSON）">'+ICON.down+'<span class="lbl">导出摘要</span></button>'+del;
+ $('top-acts').innerHTML=(ACTIVE.includes(t.state)?'<button class="btn stop" data-act="cancel" title="只停止这个任务">'+ICON.stop+'<span class="lbl">停止任务</span></button>':'')+'<button class="btn" data-openfolder title="在资源管理器中打开项目文件夹">'+ICON.open+'<span class="lbl">打开文件夹</span></button><button class="btn" id="export" title="导出脱敏交接摘要（JSON）">'+ICON.down+'<span class="lbl">导出摘要</span></button>'+del;
 }
 
 /* ---------- thread ---------- */
@@ -482,7 +509,7 @@ function eventsHtml(t){
 function studyThread(t){
  const runs=Object.fromEntries((t.runs||[]).map(r=>[r.id,r]));let h='<div class="thread">',last=null;
  t.messages.forEach((m,i)=>{
-  if(m.role==='user'){h+='<div class="msg user"><div class="bubble">'+esc(m.text)+'</div><div class="under"><span>'+esc(clock(m.at))+'</span><button type="button" class="icon-btn" data-copymsg="'+i+'" title="复制">'+ICON.copy+'</button></div></div>';return}
+  if(m.role==='user'){h+='<div class="msg user"><div class="bubble">'+esc(m.text)+'</div>'+bubbleAtts(m.attachments)+'<div class="under"><span>'+esc(clock(m.at))+'</span><button type="button" class="icon-btn" data-copymsg="'+i+'" title="复制">'+ICON.copy+'</button></div></div>';return}
   if(last&&last!==m.executor)h+='<div class="stage-line switch-line">已切换到 '+esc(NAME[m.executor])+'，带上了之前的对话记录</div>';
   last=m.executor;const r=(runs[m.run]||{}).result||{};
   h+='<div class="msg"><div class="who">'+avatar(m.executor)+'<b>'+esc(NAME[m.executor]||m.executor)+'</b><span>'+esc(clock(m.at))+(r.elapsed_s!=null?' · 用时 '+esc(dur(r.elapsed_s)):'')+esc(usageText(r))+'</span></div><div class="body">'+processBlock(m.run,m.text)+md(m.text)
@@ -490,6 +517,8 @@ function studyThread(t){
    +'<div class="under"><button type="button" class="icon-btn" data-copymsg="'+i+'" title="复制回答">'+ICON.copy+'</button>'
    +(runs[m.run]?more('run:'+m.run,'详情',kv([['运行 ID',m.run],['会话 ID',r.session_id],['耗时',r.elapsed_s!=null?dur(r.elapsed_s):''],['模型',r.model?modelText(r.model):''],['日志',runs[m.run].log]])):'')+'</div></div></div>';
  });
+ const made=taskFiles.filter(f=>!(t.messages||[]).some(m=>(m.attachments||[]).some(a=>a.path===f.path)));
+ if(made.length)h+='<div class="msg"><div class="who">'+avatar('sys')+'<b>dede工作台</b><span class="role">这个对话的产物</span></div><div class="body"><div class="card">'+fileCards(made)+'</div></div></div>';
  if(ACTIVE.includes(t.state)){
   let start=0;for(let k=events.length-1;k>=0;k--){if(['message','resume_requested','created'].includes(events[k].kind)){start=k;break}}
   const liveRun=[...events].reverse().find(e=>e.kind==='process_started'&&e.data&&e.data.run&&events.indexOf(e)>=start);
@@ -509,10 +538,10 @@ function renderThread(){
  const t=detail;blobs.length=0;
  if(kindOf(t)==='study')return studyThread(t);
  const ctx={reviews:t.reviews||[],reviewIdx:0,reviewed:0,repair:0,execs:0,sessions:t.sessions||{},takeover:t.takeover};
- let h='<div class="thread"><div class="msg user"><div class="bubble">'+esc(t.prompt)+'</div><div class="under"><span>'+esc(clock(t.created))+' · '+esc(MODES[t.mode]||t.mode)+'</span><button type="button" class="icon-btn" data-copytext="'+esc(t.prompt)+'" title="复制">'+ICON.copy+'</button></div></div>';
+ let h='<div class="thread"><div class="msg user"><div class="bubble">'+esc(t.prompt)+'</div>'+bubbleAtts(t.attachments)+'<div class="under"><span>'+esc(clock(t.created))+' · '+esc(MODES[t.mode]||t.mode)+'</span><button type="button" class="icon-btn" data-copytext="'+esc(t.prompt)+'" title="复制">'+ICON.copy+'</button></div></div>';
  if(t.mode!=='codex'&&t.harness_model)h+='<div class="stage-line">Harness 模型已固定：'+esc(modelText(t.harness_model))+'</div>';
  const items=[...(t.runs||[]).map((run,i)=>({at:run.at,html:()=>runMessage(run,i,ctx)})),
-  ...(t.guidance||[]).map((g,i)=>({at:g.at,html:()=>'<div class="msg user"><div class="bubble guide">'+esc(g.text)+'</div><div class="under"><span class="tag '+(g.applied?'ok':'wait')+'">'+(g.applied?'已带上':g.interrupt?'正在打断这一轮':'排队中 · 这一轮结束后带上')+'</span><span>引导 · '+esc(clock(g.at))+'</span><button type="button" class="icon-btn" data-copytext="'+esc(g.text)+'" title="复制">'+ICON.copy+'</button></div></div>'}))]
+  ...(t.guidance||[]).map((g,i)=>({at:g.at,html:()=>'<div class="msg user"><div class="bubble guide">'+esc(g.text)+'</div>'+bubbleAtts(g.attachments)+'<div class="under"><span class="tag '+(g.applied?'ok':'wait')+'">'+(g.applied?'已带上':g.interrupt?'正在打断这一轮':'排队中 · 这一轮结束后带上')+'</span><span>引导 · '+esc(clock(g.at))+'</span><button type="button" class="icon-btn" data-copytext="'+esc(g.text)+'" title="复制">'+ICON.copy+'</button></div></div>'}))]
   .sort((a,b)=>String(a.at).localeCompare(String(b.at)));
  items.forEach(x=>{h+=x.html()});
  const checks=t.last_checks||[],arts=t.artifacts||[];
@@ -520,7 +549,7 @@ function renderThread(){
   let b='';
   if(checks.length)b+='<div class="card"><h4>验收命令（最近一轮'+(checks[0].auto?' · 自动识别，由工作台运行':'')+'）</h4>'+checks.map((c,k)=>'<div><span class="verdict '+(c.passed?'ok':'bad')+'">'+(c.passed?'✓':'✕')+'</span> <code>'+esc((c.argv||[]).join(' '))+'</code> <span style="color:var(--faint);font-size:12px">退出码 '+esc(c.exit_code)+(c.timed_out?' · 超时':'')+'</span>'+(c.output?more('check:'+k,'输出',raw(c.output)):'')+'</div>').join('')+'</div>';
   if(arts.length){const n={created:0,modified:0,deleted:0};arts.forEach(a=>n[a.change]=(n[a.change]||0)+1);
-   b+='<div class="card"><h4>文件变更 · 新增 '+n.created+' · 修改 '+n.modified+' · 删除 '+n.deleted+'</h4><div class="files">'+arts.map(a=>'<div><span class="c '+esc(a.change)+'">'+esc({created:'新增',modified:'修改',deleted:'删除'}[a.change]||a.change)+'</span>'+esc(a.path)+'</div>').join('')+'</div></div>'}
+   b+='<div class="card"><h4>产物 · 新增 '+n.created+' · 修改 '+n.modified+' · 删除 '+n.deleted+'</h4>'+fileCards(taskFiles.length?taskFiles:arts.map(a=>({rel:a.path,name:baseName(a.path),path:null,change:a.change})))+'</div>'}
   h+='<div class="msg"><div class="who">'+avatar('sys')+'<b>dede工作台</b><span class="role">产物与验收</span></div><div class="body">'+b+'</div></div>';
  }
  h+=statusMessage(t);
@@ -553,7 +582,7 @@ function renderMain(scrollEnd){
  if(sig===lastRenderSig&&!scrollEnd)return;
  const s=$('scroll'),stick=scrollEnd||nearBottom(),top=s.scrollTop,grew=lastRenderSig&&lastRenderSig.split('|')[2]!==String(lastSeq);
  if(!scrollEnd&&lastRenderSig&&getSelection().toString()&&s.contains(getSelection().anchorNode))return; // user is selecting text
- lastRenderSig=sig;$('view').innerHTML=renderThread();
+ lastRenderSig=sig;$('view').innerHTML=renderThread();hydratePreviews();
  if(stick){s.scrollTop=s.scrollHeight;$('to-bottom').hidden=true}
  else{s.scrollTop=top;if(grew)showToBottom('有新内容 · 回到底部')}
 }
@@ -574,6 +603,7 @@ document.addEventListener('click',async e=>{
  if(b.dataset.wrap!==undefined)return b.closest('.codebox').classList.toggle('wrap');
  if(b.dataset.mode){$('mode').value=b.dataset.mode;syncMode();return $('prompt').focus()}
  if(b.id==='export')return exportSummary(b);
+ if(b.dataset.openfolder!==undefined)return openFile('', 'folder');
  if(b.dataset.act){
   const act=b.dataset.act,id=selected;
   if(act==='delete')return deleteSelected(b);
@@ -614,6 +644,98 @@ if(localStorage.getItem('workbench.side')==='0')$('app').classList.add('collapse
 /* ---------- composer ---------- */
 const input=$('prompt');let submitting=false,composing=false;
 function grow(){input.style.height='auto';input.style.height=Math.min(input.scrollHeight,innerHeight*.4)+'px';syncSend()}
+/* ---------- files: cards, previews, open on this machine ---------- */
+let taskFiles=[],filesSig=null;const previews=new Map();
+const size=n=>n==null?'':n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB';
+const CHANGE={created:'新增',modified:'修改',deleted:'已删除'};
+function fileCards(list){
+ const card=f=>{const gone=f.change==='deleted'||!f.path,ic=gone?'<span class="ic gone">'+ICON.file+'</span>':f.image?'<span class="ic img"><img alt="" data-preview="'+esc(f.path)+'"></span>':f.executable?'<span class="ic exe">'+ICON.gear+'</span>':'<span class="ic">'+ICON.file+'</span>';
+  return'<div class="fcard'+(gone?' gone':'')+'" tabindex="0"'+(gone?'':' data-file="'+esc(f.path)+'" data-exec="'+(f.executable?1:0)+'"')+' title="'+esc(f.rel||f.name)+(gone?'':'\n双击打开 · 右键更多')+'">'+ic+'<span class="nm"><b>'+esc(f.name)+'</b><small>'+esc([CHANGE[f.change],size(f.size),f.rel&&f.rel!==f.name?f.rel:''].filter(Boolean).join(' · '))+'</small></span></div>'};
+ const shown=list.slice(0,6),rest=list.slice(6);
+ return'<div class="fcards">'+shown.map(card).join('')+'</div>'+(rest.length?'<details class="more more-files" data-key="files"'+(openKeys.has('files')?' open':'')+'><summary>查看所有产物（'+list.length+'）</summary><div class="fcards">'+rest.map(card).join('')+'</div></details>':'')
+  +'<div class="fhint">双击用默认程序打开 · 右键可选打开方式、在资源管理器中显示</div>';
+}
+function bubbleAtts(list){
+ if(!list||!list.length)return'';
+ return'<div class="bubble-atts">'+list.map(a=>'<span class="att'+(a.image&&list.length===1?' big':'')+'" data-file="'+esc(a.path)+'" data-exec="0" title="'+esc(a.path)+'\n双击打开 · 右键更多">'+(a.image?'<img alt="" data-preview="'+esc(a.path)+'">':'<span class="ic">'+ICON.file+'</span>')+'<span class="nm"><b>'+esc(a.name)+'</b><small>'+esc(size(a.size))+'</small></span></span>').join('')+'</div>';
+}
+async function hydratePreviews(){
+ const id=selected;
+ for(const img of document.querySelectorAll('#view img[data-preview]')){
+  const key=id+'|'+img.dataset.preview;
+  if(!previews.has(key))previews.set(key,fetch('/api/tasks/'+encodeURIComponent(id)+'/preview?path='+encodeURIComponent(img.dataset.preview),{headers:{'X-Workbench-Token':token}}).then(r=>r.ok?r.blob():null).then(b=>b?URL.createObjectURL(b):null).catch(()=>null));
+  previews.get(key).then(url=>{if(url&&img.isConnected){img.src=url;img.dataset.full=url}});
+ }
+}
+async function openFile(path,action,run){
+ try{const r=await api('/api/tasks/'+encodeURIComponent(selected)+'/open',{path,action,run:!!run});
+  if(r.blocked)toast('这是可执行文件：为了安全，双击只会在资源管理器中定位它。要运行请右键选择“运行”。');
+  else toast({open:'已用默认程序打开',with:'已打开“选择打开方式”窗口',reveal:'已在资源管理器中显示',folder:'已打开文件夹'}[r.done]||'已打开',true)}
+ catch(err){toast(err.message)}
+}
+function showCtx(x,y,el){
+ const exec=el.dataset.exec==='1',m=$('ctx');
+ m.innerHTML=(exec?'<button data-ctx="reveal">在资源管理器中显示</button><button data-ctx="run" class="warn">运行（会执行这个程序）</button>'
+   :'<button data-ctx="open">打开</button><button data-ctx="with">打开方式…</button><button data-ctx="reveal">在资源管理器中显示</button>')
+  +(el.querySelector('img[data-full]')?'<button data-ctx="zoom">查看大图</button>':'')+'<hr><button data-ctx="copy">复制路径</button>';
+ m.dataset.path=el.dataset.file;m.hidden=false;
+ const r=m.getBoundingClientRect();m.style.left=Math.min(x,innerWidth-r.width-8)+'px';m.style.top=Math.min(y,innerHeight-r.height-8)+'px';
+ m._el=el;m.querySelector('button').focus();
+}
+function hideCtx(){$('ctx').hidden=true}
+function zoom(url){const box=document.createElement('div');box.className='lightbox';box.innerHTML='<img alt="">';box.firstChild.src=url;box.onclick=()=>box.remove();document.body.appendChild(box)}
+document.addEventListener('click',e=>{const img=e.target.closest('.shot img[data-full],.bubble-atts .att.big img[data-full]');if(img)zoom(img.dataset.full)});
+document.addEventListener('contextmenu',e=>{const el=e.target.closest('[data-file]');if(!el||!selected)return;e.preventDefault();showCtx(e.clientX,e.clientY,el)});
+document.addEventListener('dblclick',e=>{const el=e.target.closest('[data-file]');if(!el||!selected)return;e.preventDefault();getSelection().removeAllRanges();openFile(el.dataset.file,'open')});
+document.addEventListener('keydown',e=>{const el=document.activeElement&&document.activeElement.closest&&document.activeElement.closest('[data-file]');
+ if(el&&e.key==='Enter'){e.preventDefault();openFile(el.dataset.file,'open')}
+ if(el&&(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10'))){e.preventDefault();const r=el.getBoundingClientRect();showCtx(r.left+20,r.bottom,el)}
+ if(e.key==='Escape')hideCtx()});
+document.addEventListener('mousedown',e=>{if(!$('ctx').hidden&&!$('ctx').contains(e.target))hideCtx()});
+document.addEventListener('scroll',hideCtx,true);
+$('ctx').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const path=$('ctx').dataset.path,act=b.dataset.ctx,el=$('ctx')._el;hideCtx();
+ if(act==='copy')return copyText(path);
+ if(act==='zoom')return zoom(el.querySelector('img[data-full]').dataset.full);
+ if(act==='run'){if(!confirm('运行这个程序？\n\n'+path+'\n\n它是 Agent 生成或修改的文件，会以你的账户权限在本机执行。'))return;return openFile(path,'open',true)}
+ openFile(path,act)});
+
+/* ---------- attachments: drag, paste or pick; the agent gets absolute paths ---------- */
+let atts=[];
+const attPayload=()=>atts.filter(a=>a.path&&!a.loading).map(a=>({path:a.path}));
+function clearAtts(){atts.forEach(a=>a.thumb&&URL.revokeObjectURL(a.thumb));atts=[];renderAtts()}
+function chatExecutor(){const t=selected?detail:null;if(curSpace()==='study')return $('chat-model').value;return(t?t.mode:$('mode').value)}
+function renderAtts(){
+ const row=$('att-row');row.hidden=!atts.length;
+ const ex=chatExecutor(),pics=atts.some(a=>a.image);
+ const hint=pics&&ex==='harness'?'Harness 拿到的是图片路径，无法直接看懂图片内容；要识图请在右下角切到 Codex。':pics&&ex==='combined'?'Codex 规划和审核能看到图片；Harness 执行时只拿到图片路径。':'';
+ row.innerHTML=atts.map((a,i)=>'<span class="att" title="'+esc(a.path||a.name)+'">'+(a.thumb?'<img alt="" src="'+esc(a.thumb)+'">':'<span class="ic">'+(a.image?ICON.img:ICON.file)+'</span>')
+  +'<span class="nm"><b>'+esc(a.name)+'</b><small>'+(a.loading?'上传中…':esc(size(a.size)))+'</small></span><button type="button" class="x" data-unatt="'+i+'" title="移除">×</button></span>').join('')+(hint?'<span class="att-hint">'+esc(hint)+'</span>':'');
+}
+$('att-row').addEventListener('click',e=>{const b=e.target.closest('[data-unatt]');if(!b)return;const a=atts.splice(+b.dataset.unatt,1)[0];if(a&&a.thumb)URL.revokeObjectURL(a.thumb);renderAtts()});
+async function uploadFile(file){
+ if(atts.length>=10)return toast('最多 10 个附件');
+ if(file.size>20*1024*1024)return toast('附件超过 20 MB：'+file.name);
+ const item={name:file.name||'粘贴的图片.png',size:file.size,image:/^image\//.test(file.type),loading:true,thumb:/^image\//.test(file.type)?URL.createObjectURL(file):null};
+ atts.push(item);renderAtts();
+ try{const r=await fetch('/api/attachments',{method:'POST',headers:{'X-Workbench-Token':token,'Content-Type':'application/octet-stream','X-File-Name':encodeURIComponent(item.name)},body:file});
+  const v=await r.json().catch(()=>({}));if(!r.ok)throw Error(v.error||'上传失败');Object.assign(item,v,{loading:false})}
+ catch(err){atts=atts.filter(a=>a!==item);toast(err.message)}
+ renderAtts();
+}
+const composerEl=$('composer');
+composerEl.addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('Files')){e.preventDefault();composerEl.classList.add('drag')}});
+composerEl.addEventListener('dragleave',e=>{if(!composerEl.contains(e.relatedTarget))composerEl.classList.remove('drag')});
+composerEl.addEventListener('drop',e=>{if(!e.dataTransfer.files.length)return;e.preventDefault();composerEl.classList.remove('drag');[...e.dataTransfer.files].forEach(uploadFile)});
+addEventListener('dragover',e=>e.preventDefault());addEventListener('drop',e=>e.preventDefault());  // a stray drop must not navigate away
+input.addEventListener('paste',e=>{const list=[...(e.clipboardData&&e.clipboardData.files||[])];if(list.length){e.preventDefault();list.forEach(uploadFile)}});
+$('attach').addEventListener('click',async()=>{
+ const b=$('attach');b.disabled=true;toast('已在本机打开“选择文件”窗口；没看到的话请查看任务栏',true);
+ try{const picked=await api('/api/attachments/pick',{initial:selected&&detail?detail.cwd:cwd});
+  for(const a of picked){if(atts.length>=10)break;if(!atts.some(x=>x.path===a.path))atts.push(a)}renderAtts();input.focus()}
+ catch(err){toast(err.message)}finally{b.disabled=false}
+});
+$('chat-model').addEventListener('change',renderAtts);$('mode').addEventListener('change',renderAtts);
+
 function syncSend(){
  const t=selected?detail:null,running=!!(t&&ACTIVE.includes(t.state)&&t.state!=='queued');
  $('send').disabled=submitting||!input.value.trim();
@@ -633,15 +755,15 @@ function syncComposer(){
 }
 function syncChatModel(){
  const sel=$('chat-model'),h=sel.options[0],c=sel.options[1];
- h.textContent='Harness · '+(harnessInfo?harnessInfo.model+(harnessInfo.reasoning_effort?' '+harnessInfo.reasoning_effort:''):'桌面配置');
- c.textContent='Codex · '+(codexInfo&&codexInfo.model?codexInfo.model+(codexInfo.reasoning_effort?' '+codexInfo.reasoning_effort:''):'本机默认模型');
+ h.textContent='Harness · '+(harnessInfo?harnessInfo.model+(harnessInfo.reasoning_effort?' '+harnessInfo.reasoning_effort:''):'桌面配置')+' · 文本';
+ c.textContent='Codex · '+(codexInfo&&codexInfo.model?codexInfo.model+(codexInfo.reasoning_effort?' '+codexInfo.reasoning_effort:''):'本机默认模型')+' · 视觉';
 }
 $('chat-model').addEventListener('change',()=>localStorage.setItem('workbench.chatModel',$('chat-model').value));
 if(['harness','codex'].includes(localStorage.getItem('workbench.chatModel')))$('chat-model').value=localStorage.getItem('workbench.chatModel');
 async function loadStudyRoot(){try{studyRoot=await api('/api/study/root')}catch{}if(!selected&&space==='study'&&!input.value)renderMain(false)}
 let interruptNext=false;
 async function sendFollowUp(text){
- const body={text,interrupt:interruptNext};if(kindOf(detail)==='study')body.executor=$('chat-model').value;
+ const body={text,interrupt:interruptNext,attachments:attPayload()};if(kindOf(detail)==='study')body.executor=$('chat-model').value;
  const t=await api('/api/tasks/'+encodeURIComponent(detail.id)+'/messages',body);
  detail=t;lastRenderSig='';renderMain(true);poll();
  toast(interruptNext?'正在打断这一轮，马上带上你的话接着做':ACTIVE.includes(t.state)&&kindOf(t)==='work'?'已排队：这一轮结束后带上':'已发送',true);
@@ -650,7 +772,7 @@ $('interrupt').addEventListener('click',()=>{if(!input.value.trim())return;inter
 async function sendStudy(text){
  const executor=$('chat-model').value;
  if(selected&&detail&&kindOf(detail)==='study'){
-  const t=await api('/api/tasks/'+encodeURIComponent(detail.id)+'/messages',{text,executor});
+  const t=await api('/api/tasks/'+encodeURIComponent(detail.id)+'/messages',{text,executor,attachments:attPayload()});
   detail=t;lastRenderSig='';renderMain(true);poll();return;
  }
  if(!studyRoot||!studyRoot.ready){
@@ -660,7 +782,7 @@ async function sendStudy(text){
    studyRoot=await api('/api/study/root/setup',{});
   }
  }
- const t=await api('/api/study',{text,executor});
+ const t=await api('/api/study',{text,executor,attachments:attPayload()});
  tasks=[t,...tasks.filter(x=>x.id!==t.id)];select(t.id);
 }
 input.addEventListener('input',grow);
@@ -708,17 +830,19 @@ document.addEventListener('mousedown',e=>{if(!$('cwd-menu').hidden&&!$('picker')
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('cwd-menu').hidden){closeMenu();$('cwd-btn').focus()}});
 syncCwd();checkCwd(false);
 $('composer').addEventListener('submit',async e=>{
- e.preventDefault();if(submitting||!input.value.trim()){interruptNext=false;return}
+ e.preventDefault();if(atts.some(a=>a.loading)){toast('附件还在上传，请稍等');return}
+ if(atts.length&&!input.value.trim())input.value='请看附件';
+ if(submitting||!input.value.trim()){interruptNext=false;return}
  if(selected&&detail){
   submitting=true;syncSend();
-  try{await sendFollowUp(input.value);input.value='';grow()}
+  try{await sendFollowUp(input.value);input.value='';clearAtts();grow()}
   catch(err){toast(err.message)}
   finally{submitting=false;interruptNext=false;syncSend()}
   return;
  }
  if(curSpace()==='study'){
   submitting=true;syncSend();
-  try{const text=input.value;await sendStudy(text);input.value='';grow()}
+  try{const text=input.value;await sendStudy(text);input.value='';clearAtts();grow()}
   catch(err){toast(err.message)}
   finally{submitting=false;syncSend()}
   return;
@@ -730,8 +854,8 @@ $('composer').addEventListener('submit',async e=>{
  try{checks=JSON.parse($('checks').value.trim()||'[]')}catch{$('adv').hidden=false;$('adv-toggle').classList.add('on');toast('验收命令不是有效的 JSON，例如 [["python", "-m", "unittest"]]');return $('checks').focus()}
  submitting=true;syncSend();
  try{
-  const task=await api('/api/tasks',{prompt:input.value,cwd,mode:$('mode').value,timeout:Number($('timeout').value),checks,permission:$('perm').value,auto_checks:$('auto-checks').checked});
-  remember(cwd);input.value='';grow();
+  const task=await api('/api/tasks',{prompt:input.value,cwd,mode:$('mode').value,timeout:Number($('timeout').value),checks,permission:$('perm').value,auto_checks:$('auto-checks').checked,attachments:attPayload()});
+  remember(cwd);input.value='';clearAtts();grow();
   tasks=[task,...tasks.filter(t=>t.id!==task.id)];select(task.id);
  }catch(err){toast(err.message)}
  finally{submitting=false;syncSend()}

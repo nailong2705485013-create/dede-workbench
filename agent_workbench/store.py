@@ -46,7 +46,8 @@ class Store:
         finally:
             db.close()
 
-    def create(self, prompt, cwd, mode="combined", timeout=600, checks=None, permission="normal", auto_checks=False):
+    def create(self, prompt, cwd, mode="combined", timeout=600, checks=None, permission="normal", auto_checks=False,
+               attachments=None):
         if not isinstance(cwd, (str, Path)) or not str(cwd).strip():
             raise ValueError("请填写项目文件夹")
         path = Path(cwd).expanduser().resolve(strict=True)
@@ -73,16 +74,16 @@ class Store:
                     runs=[], artifacts=[], created=now(), updated=now(), stop_reason=None,
                     cancel_requested=False, takeover=False, baseline=None, last_result=None,
                     harness_model=None, kind="work", permission=permission, escalate=False,
-                    auto_checks=bool(auto_checks))
+                    auto_checks=bool(auto_checks), attachments=attachments or [])
         with self.connect() as db:
             db.execute("INSERT INTO tasks VALUES (?,?)", (task["id"], json.dumps(task, ensure_ascii=False)))
         self.event(task["id"], "created", {"mode": mode, "cwd": str(path), "permission": permission})
         return task
 
-    def create_study(self, text, executor, cwd):
+    def create_study(self, text, executor, cwd, attachments=None):
         task = dict(id=uuid.uuid4().hex[:12], kind="study", prompt=text, cwd=str(cwd), mode="study", executor=executor,
                     timeout=900, checks=[], state="queued", stage="chat", repair_count=0, runtime_failures=0,
-                    sessions={}, seen={}, messages=[dict(role="user", text=text, at=now())], plan=None, reviews=[],
+                    sessions={}, seen={}, messages=[dict(role="user", text=text, at=now(), attachments=attachments or [])], plan=None, reviews=[],
                     runs=[], artifacts=[], created=now(), updated=now(), stop_reason=None, cancel_requested=False,
                     takeover=False, baseline=None, last_result=None, harness_model=None)
         with self.connect() as db:

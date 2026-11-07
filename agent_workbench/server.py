@@ -16,6 +16,8 @@ from .engine import Engine
 from .folder_picker import pick_folder
 from .workspace import detect_checks, harness_can_grant, show_command
 from .study import codex_model
+from . import files
+from urllib.parse import unquote
 from .locks import InstanceLock
 from .store import Store
 from .model_config import desktop_source, public_model
@@ -40,7 +42,8 @@ def handler(engine, token):
         def log_message(self, *_):
             pass
 
-        def respond(self, status, value, content_type="application/json; charset=utf-8"):
+        def respond(self, status, value, content_type="application/json; charset=utf-8",
+                    csp="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'"):
             payload = value if isinstance(value, bytes) else (value.encode("utf-8") if isinstance(value, str) else json.dumps(value, ensure_ascii=False).encode("utf-8"))
             self.send_response(status)
             self.send_header("Content-Type", content_type)
@@ -48,7 +51,7 @@ def handler(engine, token):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'")
+            self.send_header("Content-Security-Policy", csp)
             self.end_headers()
             self.wfile.write(payload)
 
@@ -119,6 +122,12 @@ def handler(engine, token):
                     task_id = parts[2]
                     if len(parts) == 4 and parts[3] == "events":
                         self.respond(200, engine.store.events(task_id, int(parse_qs(url.query).get("after", [0])[0])))
+                    elif len(parts) == 4 and parts[3] == "files":
+                        self.respond(200, files.list_files(engine.store.get(task_id)))
+                    elif len(parts) == 4 and parts[3] == "preview":
+                        data, kind = files.read_preview(engine.store.get(task_id), parse_qs(url.query).get("path", [""])[0],
+                                                        engine.upload_root)
+                        self.respond(200, data, kind, csp="default-src 'none'; style-src 'unsafe-inline'; sandbox")
                     elif len(parts) == 4 and parts[3] == "summary":
                         self.respond(200, engine.store.summary(task_id))
                     elif len(parts) == 3:
@@ -139,6 +148,16 @@ def handler(engine, token):
             allowed = {f"http://127.0.0.1:{self.server.server_port}", f"http://localhost:{self.server.server_port}"}
             if self.headers.get("X-Workbench-Token") != token or (origin and origin not in allowed):
                 self.respond(403, {"error": "请求来源或令牌无效"})
+                return
+            if urlsplit(self.path).path == "/api/attachments":
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if not 0 < length <= files.MAX_UPLOAD:
+                        raise ValueError("附件为空或超过 20 MB")
+                    name = unquote(self.headers.get("X-File-Name", "file"))
+                    self.respond(200, files.save_upload(engine.upload_root, name, self.rfile.read(length)))
+                except (ValueError, OSError) as exc:
+                    self.respond(400, {"error": str(exc)})
                 return
             if self.headers.get("Content-Type", "").split(";")[0] != "application/json":
                 self.respond(415, {"error": "需要 JSON 请求"})
@@ -163,18 +182,26 @@ def handler(engine, token):
                 elif parts == ["api", "study", "root", "setup"]:
                     self.respond(200, {"root": str(engine.setup_study_root()), "ready": True})
                     return
+                elif parts == ["api", "attachments", "pick"]:
+                    self.respond(200, files.pick_files(body.get("initial") or ""))
+                    return
                 elif parts == ["api", "study"]:
-                    value = engine.submit_study(body.get("text"), body.get("executor", "harness"))
+                    value = engine.submit_study(body.get("text"), body.get("executor", "harness"), body.get("attachments"))
                 elif parts == ["api", "tasks"]:
                     value = engine.submit(prompt=body.get("prompt"), cwd=body.get("cwd", ""), mode=body.get("mode", "combined"),
                                           timeout=body.get("timeout", 600), checks=body.get("checks", []),
-                                          permission=body.get("permission", "normal"), auto_checks=body.get("auto_checks") is True)
+                                          permission=body.get("permission", "normal"), auto_checks=body.get("auto_checks") is True,
+                                          attachments=body.get("attachments"))
                 elif len(parts) == 4 and parts[:2] == ["api", "tasks"]:
                     if parts[3] == "cancel":
                         value = engine.cancel(parts[2])
                     elif parts[3] == "messages":
                         value = engine.add_message(parts[2], body.get("text"), body.get("executor"),
-                                                   interrupt=body.get("interrupt") is True)
+                                                   interrupt=body.get("interrupt") is True, attachments=body.get("attachments"))
+                    elif parts[3] == "open":
+                        self.respond(200, files.open_path(engine.store.get(parts[2]), body.get("path", ""), body.get("action"),
+                                                          engine.upload_root, confirmed_run=body.get("run") is True))
+                        return
                     elif parts[3] == "delete":
                         self.respond(200, engine.delete(parts[2]))
                         return

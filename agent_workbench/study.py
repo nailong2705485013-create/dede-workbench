@@ -74,6 +74,19 @@ def remove_folder(path, root):
     shutil.rmtree(path, onexc=writable)
 
 
+def body(message):
+    from .files import prompt_note
+    return message["text"] + prompt_note(message.get("attachments"))
+
+
+def images(messages):
+    return [a["path"] for m in messages if m["role"] == "user" for a in m.get("attachments", []) if a.get("image")]
+
+
+def unseen(task, executor, fresh):
+    return task["messages"][0 if fresh else task["seen"].get(executor, 0):]
+
+
 def label(message):
     return "用户" if message["role"] == "user" else NAMES.get(message.get("executor"), "助手")
 
@@ -91,25 +104,24 @@ def write_transcript(task):
 
 def build_prompt(task, executor, fresh):
     """The new session gets the rules; every turn gets the messages this executor has not seen yet."""
-    messages = task["messages"]
-    batch = messages[0 if fresh else task["seen"].get(executor, 0):]
+    batch = unseen(task, executor, fresh)
     head = RULES if fresh else ""
     if all(m["role"] == "user" for m in batch):
-        return head + "\n\n".join(m["text"] for m in batch)
+        return head + "\n\n".join(body(m) for m in batch)
     *history, = batch
     while history and history[-1]["role"] == "user":
         history.pop()
     latest = batch[len(history):]
     blocks, size = [], 0
     for m in reversed(history):
-        block = f"### {label(m)}\n{m['text']}\n"
+        block = f"### {label(m)}\n{body(m)}\n"
         if size + len(block) > CONTEXT_LIMIT:
             blocks.append(f"（更早的记录较长，已省略；完整记录在工作目录的 {TRANSCRIPT}，需要时可以读取。）\n")
             break
         blocks.append(block)
         size += len(block)
     return (head + "以下是这段对话中你还没看到的记录，可能来自其他模型，请据此接着对话：\n\n"
-            + "\n".join(reversed(blocks)) + "\n---\n用户的最新消息：\n" + "\n\n".join(m["text"] for m in latest))
+            + "\n".join(reversed(blocks)) + "\n---\n用户的最新消息：\n" + "\n\n".join(body(m) for m in latest))
 
 
 def codex_model():

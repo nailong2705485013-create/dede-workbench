@@ -18,6 +18,7 @@ from .model_config import public_model, validate_snapshot
 from .store import ACTIVE, now
 from .workspace import HARNESS_ACL_HINT, detect_checks, harness_can_grant
 from . import study
+from . import files
 import shutil
 
 
@@ -99,8 +100,12 @@ class Engine:
         for thread in [t for t in threading.enumerate() if t.name.startswith("workbench-task-")]:
             thread.join(timeout=25)
 
-    def submit(self, **kwargs):
-        task = self.store.create(**kwargs)
+    @property
+    def upload_root(self):
+        return self.store.root / "attachments"
+
+    def submit(self, attachments=None, **kwargs):
+        task = self.store.create(attachments=files.check_attachments(attachments, self.upload_root), **kwargs)
         self.pending.put(task["id"])
         return task
 
@@ -163,24 +168,26 @@ class Engine:
             raise ValueError("未知模型；可选 Harness 或 Codex")
         return text.strip()
 
-    def submit_study(self, text, executor="harness"):
+    def submit_study(self, text, executor="harness", attachments=None):
         text = self._chat_args(text, executor)
+        attachments = files.check_attachments(attachments, self.upload_root)
         if not self.study_ready():
             raise ValueError("Study 文件夹还没有授权，请先在页面上同意设置 " + str(self.study_root))
-        task = self.store.create_study(text, executor, study.make_folder(self.study_root))
+        task = self.store.create_study(text, executor, study.make_folder(self.study_root), attachments)
         self.pending.put(task["id"])
         return task
 
-    def add_message(self, task_id, text, executor=None, interrupt=False):
+    def add_message(self, task_id, text, executor=None, interrupt=False, attachments=None):
         """Study: next chat message. Work: guidance. While a round runs it waits for the round, or interrupts it."""
+        attachments = files.check_attachments(attachments, self.upload_root)
         if self.store.get(task_id).get("kind") != "study":
-            return self.guide(task_id, text, interrupt)
+            return self.guide(task_id, text, interrupt, attachments)
         text = self._chat_args(text, executor)
         with self.flags_lock:
             task = self.store.get(task_id)
             if not Path(task["cwd"]).is_dir():
                 raise ValueError("这个对话的文件夹已不存在，请新建对话")
-            messages = task["messages"] + [dict(role="user", text=text, at=now())]
+            messages = task["messages"] + [dict(role="user", text=text, at=now(), attachments=attachments)]
             if task["state"] in ACTIVE:
                 self.store.update(task_id, messages=messages, executor=executor)
                 if interrupt:
@@ -193,12 +200,13 @@ class Engine:
                                                   "interrupt": bool(interrupt)})
         return self.store.get(task_id)
 
-    def guide(self, task_id, text, interrupt=False):
+    def guide(self, task_id, text, interrupt=False, attachments=None):
         if not isinstance(text, str) or not text.strip() or len(text) > 32000:
             raise ValueError("引导内容不能为空，且最多 32000 字符")
         with self.flags_lock:
             task = self.store.get(task_id)
-            guidance = task.get("guidance", []) + [dict(text=text.strip(), at=now(), interrupt=bool(interrupt), applied=False)]
+            guidance = task.get("guidance", []) + [dict(text=text.strip(), at=now(), interrupt=bool(interrupt), applied=False,
+                                                        attachments=attachments or [])]
             if task["state"] in ACTIVE:
                 self.store.update(task_id, guidance=guidance)
                 if interrupt:
@@ -237,7 +245,7 @@ class Engine:
 
     def _apply_guidance(self, task_id):
         task = self.store.get(task_id)
-        fresh = [g["text"] for g in task.get("guidance", []) if not g["applied"]]
+        fresh = [g for g in task.get("guidance", []) if not g["applied"]]
         if fresh:
             self.store.update(task_id, guidance=[{**g, "applied": True} for g in task["guidance"]])
         return fresh
@@ -253,6 +261,7 @@ class Engine:
                 raise ValueError("任务正在运行或排队，请先停止再删除")
             if task.get("kind") == "study":
                 study.remove_folder(task["cwd"], self.study_root)
+            files.remove_uploads(files.task_attachments(task), self.upload_root)
             shutil.rmtree(self.store.root / "runs" / task_id, ignore_errors=True)
             self.store.delete(task_id)
         return {"deleted": task_id}
@@ -286,8 +295,9 @@ class Engine:
             return False
         task = self._transition(task_id, "executing")
         count = len(task["messages"])
-        prompt = study.build_prompt(task, executor, fresh=not task["sessions"].get(executor + ":chat"))
-        result = self._run(task, executor, "chat", prompt, cancel)
+        fresh = not task["sessions"].get(executor + ":chat")
+        prompt = study.build_prompt(task, executor, fresh=fresh)
+        result = self._run(task, executor, "chat", prompt, cancel, images=study.images(study.unseen(task, executor, fresh)))
         if result is INTERRUPTED:
             return True
         if result is None:
@@ -368,7 +378,7 @@ class Engine:
         self._transition(task_id, "runtime_failed", stop_reason=reason,
                          runtime_failures=task["runtime_failures"] + 1)
 
-    def _run(self, task, executor, role, prompt, cancel, readonly=False, schema=None, continued=None):
+    def _run(self, task, executor, role, prompt, cancel, readonly=False, schema=None, continued=None, images=None):
         task_id = task["id"]
         key = f"{executor}:{role}"
         session = task["sessions"].get(key)
@@ -392,7 +402,10 @@ class Engine:
                 stream.flush()
                 self.store.event(task_id, kind, safe)
             try:
-                extra = {"model_config": task.get("harness_model")} if executor == "harness" else {}
+                if images is None:  # Work: the task's pictures go to each role's new session once
+                    images = [a["path"] for a in task.get("attachments", []) if a.get("image")] if not session else []
+                images = [p for p in images if Path(p).is_file()]
+                extra = {"model_config": task.get("harness_model")} if executor == "harness" else {"images": images}
                 result = self.adapters[executor].run(prompt, task["cwd"], task["timeout"], cancel, emit, session_id=session,
                                                      readonly=readonly, schema=schema, permission=permission, **extra)
             except (OSError, ValueError) as exc:
@@ -515,7 +528,7 @@ class Engine:
             stage = task["stage"]
             context = ("当前任务仅限工作目录。不要发送外部消息、部署或修改其他目录。"
                        "不要自行关闭沙箱、修改 ACL、接管其他 GUI 会话或在后台遗留进程。\n"
-                       f"用户任务：{task['prompt']}\n")
+                       f"用户任务：{task['prompt']}" + files.prompt_note(task.get("attachments")) + "\n")
             if task.get("guidance"):
                 context += ("用户在过程中的补充与纠正（按时间顺序，后面的优先）：\n"
                             + "\n".join(f"{n}. {g['text']}" for n, g in enumerate(task["guidance"], 1)) + "\n")
@@ -548,8 +561,12 @@ class Engine:
                 fresh = self._apply_guidance(task_id)
                 if fresh:
                     instruction += ("用户刚刚补充或纠正了要求，请在现有成果的基础上照此调整：\n"
-                                    + "\n".join("- " + text for text in fresh) + "\n")
-                result = self._run(self.store.get(task_id), executor, "executor", instruction, cancel)
+                                    + "\n".join("- " + g["text"] + files.prompt_note(g.get("attachments")) for g in fresh) + "\n")
+                latest = self.store.get(task_id)
+                pictures = [a["path"] for g in fresh for a in g.get("attachments", []) if a.get("image")]
+                if not latest["sessions"].get(executor + ":executor"):
+                    pictures = [a["path"] for a in latest.get("attachments", []) if a.get("image")] + pictures
+                result = self._run(latest, executor, "executor", instruction, cancel, images=pictures)
                 self._artifacts(self.store.get(task_id))
                 if result is INTERRUPTED:
                     self.store.update(task_id, stage="guide")

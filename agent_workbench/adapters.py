@@ -159,11 +159,14 @@ class Harness:
 class Codex:
     name = "codex"
 
-    def run(self, prompt, cwd, timeout, cancel, on_event, session_id=None, readonly=False, schema=None, permission="normal"):
+    def run(self, prompt, cwd, timeout, cancel, on_event, session_id=None, readonly=False, schema=None, permission="normal",
+            images=()):
+        # `--image=` form so each flag takes exactly one value and never swallows the trailing "-".
+        pictures = [f"--image={path}" for path in images]
         command = codex_program() + ["-c", 'approval_policy="never"', "exec", "--json", "--skip-git-repo-check",
-                                     "--sandbox", sandbox_mode(readonly, permission), "--color", "never"]
+                                     "--sandbox", sandbox_mode(readonly, permission)] + ([] if session_id else pictures) + ["--color", "never"]
         if session_id:
-            command += ["resume", session_id]
+            command += ["resume", session_id] + pictures
         if schema:
             command += ["--output-schema", str(schema)]
         command += ["-"]
