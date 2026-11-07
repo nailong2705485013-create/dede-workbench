@@ -202,6 +202,9 @@ def handler(engine, token):
                         self.respond(200, files.open_path(engine.store.get(parts[2]), body.get("path", ""), body.get("action"),
                                                           engine.upload_root, confirmed_run=body.get("run") is True))
                         return
+                    elif parts[3] == "clean":
+                        self.respond(200, engine.clean(parts[2]))
+                        return
                     elif parts[3] == "delete":
                         self.respond(200, engine.delete(parts[2]))
                         return

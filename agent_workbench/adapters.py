@@ -93,21 +93,24 @@ class Harness:
         return capture_model(self.install, self.patch)
 
     def run(self, prompt, cwd, timeout, cancel, on_event, session_id=None, readonly=False, schema=None, model_config=None,
-            permission="normal"):
+            permission="normal", scratch=None):
         if session_id and model_config is None:
             raise ValueError("恢复 Harness 会话必须提供原任务的模型快照")
         snapshot = validate_snapshot(model_config) if model_config is not None else self.capture_model()
         with tempfile.TemporaryDirectory(prefix="workbench-model-") as temporary:
             patch = Path(temporary) / "model.patch.json"
             patch.write_text(json.dumps(snapshot["patch"], ensure_ascii=False), encoding="utf-8")
-            result = self._run_with_patch(prompt, cwd, timeout, cancel, on_event, patch, session_id, sandbox_mode(readonly, permission))
+            result = self._run_with_patch(prompt, cwd, timeout, cancel, on_event, patch, session_id, sandbox_mode(readonly, permission),
+                                          None if readonly else scratch)
         result["model"] = public_model(snapshot)
         return result
 
-    def _run_with_patch(self, prompt, cwd, timeout, cancel, on_event, patch, session_id, mode):
+    def _run_with_patch(self, prompt, cwd, timeout, cancel, on_event, patch, session_id, mode, scratch=None):
         command = [str(self.install / "DeepSeek Harness.exe"), "--expose-internals", str(self.install / CLI),
                    "--profile", "headless", "--patch", str(patch), "--json",
                    "--permission-mode", mode, "--approval-policy", "never"]
+        if scratch:
+            command += ["--add-dir", str(scratch)]
         if session_id:
             command += ["--session-id", session_id]
         command += ["-"]
@@ -160,11 +163,13 @@ class Codex:
     name = "codex"
 
     def run(self, prompt, cwd, timeout, cancel, on_event, session_id=None, readonly=False, schema=None, permission="normal",
-            images=()):
+            images=(), scratch=None):
         # `--image=` form so each flag takes exactly one value and never swallows the trailing "-".
         pictures = [f"--image={path}" for path in images]
         command = codex_program() + ["-c", 'approval_policy="never"', "exec", "--json", "--skip-git-repo-check",
                                      "--sandbox", sandbox_mode(readonly, permission)] + ([] if session_id else pictures) + ["--color", "never"]
+        if scratch and not readonly:
+            command += [f"--add-dir={scratch}"]
         if session_id:
             command += ["resume", session_id] + pictures
         if schema:

@@ -36,7 +36,10 @@ INFRA = ("setnamedsecurityinfow", "createrestrictedtoken", "no sandbox backend",
          "unauthorized", "authentication", "timed out", "rate limit", "failed to spawn", "permission denied")
 LIMITS = {"work": 3, "study": 3}  # concurrent rounds per lane; Study never waits behind Work
 CHUNKING = ("写入较大的文件时分批写入（每次不超过约 300 行），先写骨架再逐步补充；修改已有文件时用局部编辑，"
-            "不要在一次回复里输出整个大文件，以免超过单次输出长度上限。\n")
+            "不要在一次回复里输出整个大文件，以免超过单次输出长度上限。"
+            "\n")
+SCRATCH_RULE = ("验证过程用的临时文件（浏览器配置目录、截图、验证脚本、缓存等）一律写到草稿目录 {scratch}（已授权可写），"
+                "不要写进工作目录；交付前删除工作目录里的临时文件，最终回答只列出正式产物。\n")
 CONTINUE_PROMPT = ("你上一次回复因为单次输出长度上限被截断了。请检查工作目录里已经写好的内容，从中断处继续完成任务；"
                    "不要重复已完成的部分，把剩余内容分成小块逐步写入（每次不超过约 300 行），最后报告实际修改和验证结果。")
 INTERRUPTED = object()  # a round stopped by "interrupt and send", not by the user's stop button
@@ -254,6 +257,23 @@ class Engine:
     def _has_pending_guidance(task):
         return any(not g["applied"] for g in task.get("guidance", []))
 
+    def scratch(self, task_id):
+        path = self.store.root / "scratch" / task_id
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def clean(self, task_id):
+        with self.flags_lock:
+            task = self.store.get(task_id)
+            if task_id in self.cancel_flags or task["state"] in ACTIVE:
+                raise ValueError("任务正在运行，请等它结束或先停止再清理")
+            if task.get("kind") == "study":
+                raise ValueError("Study 对话删除时会连同文件夹一起删除")
+            removed = files.clean_temp(task)
+            self._artifacts(self.store.get(task_id))
+        self.store.event(task_id, "cleaned", {"removed": removed})
+        return {"removed": removed}
+
     def delete(self, task_id):
         with self.flags_lock:
             task = self.store.get(task_id)
@@ -263,6 +283,7 @@ class Engine:
                 study.remove_folder(task["cwd"], self.study_root)
             files.remove_uploads(files.task_attachments(task), self.upload_root)
             shutil.rmtree(self.store.root / "runs" / task_id, ignore_errors=True)
+            shutil.rmtree(self.store.root / "scratch" / task_id, ignore_errors=True)
             self.store.delete(task_id)
         return {"deleted": task_id}
 
@@ -406,6 +427,8 @@ class Engine:
                     images = [a["path"] for a in task.get("attachments", []) if a.get("image")] if not session else []
                 images = [p for p in images if Path(p).is_file()]
                 extra = {"model_config": task.get("harness_model")} if executor == "harness" else {"images": images}
+                if task.get("kind") != "study" and not readonly:
+                    extra["scratch"] = self.scratch(task_id)
                 result = self.adapters[executor].run(prompt, task["cwd"], task["timeout"], cancel, emit, session_id=session,
                                                      readonly=readonly, schema=schema, permission=permission, **extra)
             except (OSError, ValueError) as exc:
@@ -553,7 +576,8 @@ class Engine:
             if stage in {"execute", "repair", "patch", "guide"}:
                 executor = "codex" if task["takeover"] or task["mode"] == "codex" or stage == "patch" else "harness"
                 self._transition(task_id, "patching" if stage == "patch" else "repairing" if stage == "repair" else "executing")
-                instruction = context + "\n实施已确认的任务，运行适当验证；报告实际修改、验证结果及限制。\n" + CHUNKING
+                instruction = (context + "\n实施已确认的任务，运行适当验证；报告实际修改、验证结果及限制。\n" + CHUNKING
+                               + SCRATCH_RULE.format(scratch=self.scratch(task_id)))
                 if task["plan"]:
                     instruction += "计划与验收：" + json.dumps(task["plan"], ensure_ascii=False) + "\n"
                 if stage in {"repair", "patch"} and task["reviews"]:

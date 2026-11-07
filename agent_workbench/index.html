@@ -548,7 +548,7 @@ function renderThread(){
  if(checks.length||arts.length){
   let b='';
   if(checks.length)b+='<div class="card"><h4>验收命令（最近一轮'+(checks[0].auto?' · 自动识别，由工作台运行':'')+'）</h4>'+checks.map((c,k)=>'<div><span class="verdict '+(c.passed?'ok':'bad')+'">'+(c.passed?'✓':'✕')+'</span> <code>'+esc((c.argv||[]).join(' '))+'</code> <span style="color:var(--faint);font-size:12px">退出码 '+esc(c.exit_code)+(c.timed_out?' · 超时':'')+'</span>'+(c.output?more('check:'+k,'输出',raw(c.output)):'')+'</div>').join('')+'</div>';
-  if(arts.length){const n={created:0,modified:0,deleted:0};arts.forEach(a=>n[a.change]=(n[a.change]||0)+1);
+  if(arts.length){const n={created:0,modified:0,deleted:0};arts.filter(a=>!isTempPath(a.path)).forEach(a=>n[a.change]=(n[a.change]||0)+1);
    b+='<div class="card"><h4>产物 · 新增 '+n.created+' · 修改 '+n.modified+' · 删除 '+n.deleted+'</h4>'+fileCards(taskFiles.length?taskFiles:arts.map(a=>({rel:a.path,name:baseName(a.path),path:null,change:a.change})))+'</div>'}
   h+='<div class="msg"><div class="who">'+avatar('sys')+'<b>dede工作台</b><span class="role">产物与验收</span></div><div class="body">'+b+'</div></div>';
  }
@@ -607,6 +607,8 @@ document.addEventListener('click',async e=>{
  if(b.dataset.act){
   const act=b.dataset.act,id=selected;
   if(act==='delete')return deleteSelected(b);
+  if(act==='clean'){if(!confirm('清理这个任务留下的临时文件？\n\n只删除本任务新建的、看起来是临时文件的内容（以“.”开头的文件夹，如浏览器配置；以“_”开头的截图或验证脚本）。\n任务开始前就存在的文件不会被删除。删除后无法恢复。'))return;
+   b.disabled=true;try{const r=await api('/api/tasks/'+encodeURIComponent(id)+'/clean',{});toast('已清理 '+r.removed+' 个临时文件',true);filesSig=null;lastRenderSig='';await loadDetail(false)}catch(err){toast(err.message);b.disabled=false}return}
   if(act==='escalate'&&!confirm('只让下一轮执行使用“全部权限”？\n\n这一轮 Agent 不经过沙箱，可以访问整台电脑；跑完后自动回到一般权限。'))return;
   if(act==='takeover'&&!confirm('确定交给 Codex 接管这项任务吗？\n\nCodex 会从执行阶段接手，之后的执行不再使用 Harness。'))return;
   if(act==='cancel'&&!confirm(kindOf(detail)==='study'?'停止这一轮回复？':'停止这个任务？\n\n只停止当前任务，后台服务和其他任务不受影响；之后可以恢复当前阶段。'))return;
@@ -648,12 +650,20 @@ function grow(){input.style.height='auto';input.style.height=Math.min(input.scro
 let taskFiles=[],filesSig=null;const previews=new Map();
 const size=n=>n==null?'':n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB';
 const CHANGE={created:'新增',modified:'修改',deleted:'已删除'};
+const REAL_DOT=['.gitignore','.gitattributes','.editorconfig','.env','.env.example','.github','.vscode','.prettierrc','.eslintrc','.eslintrc.json','.npmrc','.nvmrc','.python-version','.dockerignore'];
+function isTempPath(rel){const parts=String(rel).split(/[\\/]/),top=parts[0],name=parts[parts.length-1];return(top.startsWith('.')&&!REAL_DOT.includes(top))||(parts.length===1&&name.startsWith('_')&&!name.startsWith('__'))}
 function fileCards(list){
  const card=f=>{const gone=f.change==='deleted'||!f.path,ic=gone?'<span class="ic gone">'+ICON.file+'</span>':f.image?'<span class="ic img"><img alt="" data-preview="'+esc(f.path)+'"></span>':f.executable?'<span class="ic exe">'+ICON.gear+'</span>':'<span class="ic">'+ICON.file+'</span>';
+  if(f.folder)return'<div class="fcard" tabindex="0" data-file="'+esc(f.path)+'" data-exec="0" data-folder="1" title="'+esc(f.rel)+'\n双击在资源管理器中打开'+(f.temporary?'\n名字以“.”开头，多半是 Agent 留下的临时文件（如浏览器配置、缓存）；确认后可以手动删除':'')+'"><span class="ic'+(f.temporary?' exe':'')+'">'+ICON.open+'</span><span class="nm"><b>'+esc(f.name)+'</b><small>'+esc(['文件夹',f.count+' 个文件',size(f.size),f.temporary?'可能是临时文件':''].filter(Boolean).join(' · '))+'</small></span></div>';
   return'<div class="fcard'+(gone?' gone':'')+'" tabindex="0"'+(gone?'':' data-file="'+esc(f.path)+'" data-exec="'+(f.executable?1:0)+'"')+' title="'+esc(f.rel||f.name)+(gone?'':'\n双击打开 · 右键更多')+'">'+ic+'<span class="nm"><b>'+esc(f.name)+'</b><small>'+esc([CHANGE[f.change],size(f.size),f.rel&&f.rel!==f.name?f.rel:''].filter(Boolean).join(' · '))+'</small></span></div>'};
+ const temp=list.filter(f=>f.temporary&&f.change!=='deleted');list=list.filter(f=>!temp.includes(f));
+ const tempCount=temp.reduce((n,f)=>n+(f.folder?f.count:1),0);
+ const tempHtml=temp.length?'<details class="more more-files" data-key="temp"'+(openKeys.has('temp')?' open':'')+'><summary>临时文件（'+tempCount+' 个，多半是 Agent 验证时留下的）</summary><div class="fcards">'+temp.map(card).join('')+'</div>'
+   +(detail&&kindOf(detail)==='work'?'<div class="action-bar"><button type="button" class="btn" data-act="clean"'+(ACTIVE.includes(detail.state)?' disabled':'')+'>'+ICON.trash+'清理临时文件</button><span style="font-size:12px;color:var(--faint)">只删除这个任务新建的临时文件，任务开始前就有的文件不会动</span></div>':'')+'</details>':'';
+ if(!list.length)return'<div class="fhint">没有正式产物</div>'+tempHtml;
  const shown=list.slice(0,6),rest=list.slice(6);
  return'<div class="fcards">'+shown.map(card).join('')+'</div>'+(rest.length?'<details class="more more-files" data-key="files"'+(openKeys.has('files')?' open':'')+'><summary>查看所有产物（'+list.length+'）</summary><div class="fcards">'+rest.map(card).join('')+'</div></details>':'')
-  +'<div class="fhint">双击用默认程序打开 · 右键可选打开方式、在资源管理器中显示</div>';
+  +'<div class="fhint">双击用默认程序打开 · 右键可选打开方式、在资源管理器中显示</div>'+tempHtml;
 }
 function bubbleAtts(list){
  if(!list||!list.length)return'';
@@ -675,7 +685,7 @@ async function openFile(path,action,run){
 }
 function showCtx(x,y,el){
  const exec=el.dataset.exec==='1',m=$('ctx');
- m.innerHTML=(exec?'<button data-ctx="reveal">在资源管理器中显示</button><button data-ctx="run" class="warn">运行（会执行这个程序）</button>'
+ m.innerHTML=el.dataset.folder?'<button data-ctx="open">打开文件夹</button><button data-ctx="reveal">在资源管理器中显示</button><hr><button data-ctx="copy">复制路径</button>':(exec?'<button data-ctx="reveal">在资源管理器中显示</button><button data-ctx="run" class="warn">运行（会执行这个程序）</button>'
    :'<button data-ctx="open">打开</button><button data-ctx="with">打开方式…</button><button data-ctx="reveal">在资源管理器中显示</button>')
   +(el.querySelector('img[data-full]')?'<button data-ctx="zoom">查看大图</button>':'')+'<hr><button data-ctx="copy">复制路径</button>';
  m.dataset.path=el.dataset.file;m.hidden=false;

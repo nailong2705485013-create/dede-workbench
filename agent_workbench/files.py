@@ -55,6 +55,40 @@ def describe(path, root=None):
             "size": stat.st_size, "mtime": stat.st_mtime, "image": suffix in IMAGES, "executable": suffix in EXECUTABLE}
 
 
+GROUP_AT = 20
+REAL_DOTFILES = {".gitignore", ".gitattributes", ".editorconfig", ".env", ".env.example", ".github", ".vscode",
+                 ".prettierrc", ".eslintrc", ".eslintrc.json", ".npmrc", ".nvmrc", ".python-version", ".dockerignore"}
+
+
+def is_temp(rel):
+    """Leftovers of the agent's own checks: hidden folders/files (browser profiles, caches) and single-underscore
+    files such as _shot.png or _verify.mjs. Dunder names like __init__.py are real code."""
+    top = Path(rel).parts[0]
+    if top.startswith(".") and top not in REAL_DOTFILES:
+        return True
+    name = Path(rel).name
+    return len(Path(rel).parts) == 1 and name.startswith("_") and not name.startswith("__")
+
+
+def group(entries, root):
+    """Fold a top-level folder into one card when it is hidden (.name) or holds many files, e.g. a browser profile."""
+    by_top = {}
+    for e in entries:
+        parts = Path(e["rel"]).parts
+        if len(parts) > 1:
+            by_top.setdefault(parts[0], []).append(e)
+    folded = {top for top, items in by_top.items() if top.startswith(".") or len(items) >= GROUP_AT}
+    out = [{**e, "temporary": is_temp(e["rel"])} for e in entries
+           if Path(e["rel"]).parts[0] not in folded or len(Path(e["rel"]).parts) == 1]
+    for top in sorted(folded):
+        items = by_top[top]
+        changes = {e["change"] for e in items}
+        out.insert(0, {"path": str(Path(root) / top), "rel": top + "\\", "name": top, "folder": True, "count": len(items),
+                       "size": sum(e["size"] or 0 for e in items), "image": False, "executable": False,
+                       "change": changes.pop() if len(changes) == 1 else "modified", "temporary": is_temp(top + "/x")})
+    return out
+
+
 def list_files(task):
     """Work: the task's created/modified files. Study: everything the chat produced in its folder."""
     root = Path(task["cwd"])
@@ -70,9 +104,9 @@ def list_files(task):
                     out.append({**describe(path, root), "change": "created"})
                 except OSError:
                     continue
-                if len(out) >= 300:
-                    return out
-        return sorted(out, key=lambda f: -f["mtime"])
+                if len(out) >= 3000:
+                    break
+        return group(sorted(out, key=lambda f: -f["mtime"]), root)
     for item in task.get("artifacts", []):
         path = root / item["path"]
         if item["change"] == "deleted" or not path.is_file():
@@ -83,7 +117,28 @@ def list_files(task):
             out.append({**describe(path, root), "change": item["change"]})
         except OSError:
             continue
-    return out
+    return group(out, root)
+
+
+def clean_temp(task):
+    """Delete leftovers this task created. Files that existed before the task (its baseline) are never touched."""
+    root = Path(task["cwd"]).resolve()
+    baseline = task.get("baseline") or {}
+    removed = 0
+    for item in task.get("artifacts", []):
+        rel = item["path"]
+        if item["change"] != "created" or rel in baseline or not is_temp(rel):
+            continue
+        path = (root / rel).resolve()
+        if not inside(path, root) or path == root or not path.is_file():
+            continue
+        path.unlink()
+        removed += 1
+        parent = path.parent
+        while parent != root and inside(parent, root) and not any(parent.iterdir()):
+            parent.rmdir()
+            parent = parent.parent
+    return removed
 
 
 def read_preview(task, path, attachments_root):
@@ -108,6 +163,9 @@ def open_path(task, path, action, attachments_root, confirmed_run=False):
     path = allowed(task, path, attachments_root)
     if not path.exists():
         raise ValueError("文件已不存在")
+    if path.is_dir() and action in {"open", "with"}:
+        _start(path)  # a folder card opens in Explorer
+        return {"done": "folder"}
     if action == "reveal":
         subprocess.Popen(["explorer", "/select,", str(path)], creationflags=NO_WINDOW)
         return {"done": "reveal"}
